@@ -1,0 +1,183 @@
+{
+  "clock": "process_time_ns",
+  "compiler": "GCC 14.2.0 -std=c++17 -O3 -fPIC -fvisibility=hidden",
+  "original_xsf_pr": "https://github.com/scipy/xsf/pull/495",
+  "original_head": "0cfb4a6b1598a4d06e83a21cdcdfeadd0b8e9f7d",
+  "cases": [
+    {
+      "name": "issue-32",
+      "n": 32,
+      "repeats": 200,
+      "cpu_microseconds": {
+        "baseline": 5.6254325000000005,
+        "candidate": 4.885315
+      },
+      "measurements": {
+        "baseline": [
+          5.7446850000000005,
+          5.5061800000000005,
+          4.11792,
+          50.247794999999996
+        ],
+        "candidate": [
+          4.49608,
+          5.2745500000000005,
+          4.463945,
+          28.866065
+        ]
+      },
+      "ratio_baseline_over_candidate": 1.1514984192421573,
+      "max_logsf_difference": 0.0
+    },
+    {
+      "name": "issue-256",
+      "n": 256,
+      "repeats": 20,
+      "cpu_microseconds": {
+        "baseline": 2667.2535,
+        "candidate": 2498.7694
+      },
+      "measurements": {
+        "baseline": [
+          2730.12025,
+          2763.5188,
+          2041.932,
+          2604.38675
+        ],
+        "candidate": [
+          1936.7167,
+          2505.6562999999996,
+          2491.8825,
+          2660.6376
+        ]
+      },
+      "ratio_baseline_over_candidate": 1.067426830182889,
+      "max_logsf_difference": 0.0
+    },
+    {
+      "name": "issue-tiny-16",
+      "n": 16,
+      "repeats": 200,
+      "cpu_microseconds": {
+        "baseline": 7.727845,
+        "candidate": 7.542875
+      },
+      "measurements": {
+        "baseline": [
+          6.26734,
+          7.356625,
+          8.099065,
+          12.29376
+        ],
+        "candidate": [
+          7.242945,
+          14.114455,
+          7.842805,
+          6.415895000000001
+        ]
+      },
+      "ratio_baseline_over_candidate": 1.0245224798236747,
+      "max_logsf_difference": 0.0
+    },
+    {
+      "name": "issue-32-with-deterministic-trials",
+      "n": 1024,
+      "repeats": 20,
+      "cpu_microseconds": {
+        "baseline": 11272.946575,
+        "candidate": 12.809149999999999
+      },
+      "measurements": {
+        "baseline": [
+          11421.8618,
+          11124.03135,
+          10930.8299,
+          14332.470800000001
+        ],
+        "candidate": [
+          9.83525,
+          12.40825,
+          21.363799999999998,
+          13.210049999999999
+        ]
+      },
+      "ratio_baseline_over_candidate": 880.0698387480825,
+      "max_logsf_difference": 1.4210854715202004e-14
+    },
+    {
+      "name": "all-zero",
+      "n": 1024,
+      "repeats": 20,
+      "cpu_microseconds": {
+        "baseline": 11152.078549999998,
+        "candidate": 2.8763750000000003
+      },
+      "measurements": {
+        "baseline": [
+          13709.1952,
+          11919.754949999999,
+          10384.40215,
+          10021.29445
+        ],
+        "candidate": [
+          3.2096,
+          2.5612,
+          3.1915500000000003,
+          2.40025
+        ]
+      },
+      "ratio_baseline_over_candidate": 3877.129564121506,
+      "max_logsf_difference": 0.0
+    },
+    {
+      "name": "all-one",
+      "n": 1024,
+      "repeats": 20,
+      "cpu_microseconds": {
+        "baseline": 7787.801949999999,
+        "candidate": 11.1598
+      },
+      "measurements": {
+        "baseline": [
+          7708.996099999999,
+          8016.54395,
+          7866.6078,
+          6507.139450000001
+        ],
+        "candidate": [
+          10.4315,
+          16.62425,
+          11.8881,
+          9.912049999999999
+        ]
+      },
+      "ratio_baseline_over_candidate": 697.8442221186758,
+      "max_logsf_difference": 0.0
+    },
+    {
+      "name": "empty",
+      "n": 0,
+      "repeats": 200,
+      "cpu_microseconds": {
+        "baseline": 1.506825,
+        "candidate": 1.7838225
+      },
+      "measurements": {
+        "baseline": [
+          1.3582100000000001,
+          1.65544,
+          1.251615,
+          2.039945
+        ],
+        "candidate": [
+          1.3571600000000001,
+          2.2049000000000003,
+          41.24807,
+          1.3627449999999999
+        ]
+      },
+      "ratio_baseline_over_candidate": 0.8447168930765253,
+      "max_logsf_difference": 0.0
+    }
+  ]
+}
