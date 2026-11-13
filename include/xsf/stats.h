@@ -265,32 +265,74 @@ XSF_HOST_DEVICE inline float tukeylambdacdf(float x, float lmbda) {
 namespace detail {
 
     template <typename InputMat, typename OutputMat>
-    XSF_HOST_DEVICE inline void poisson_binom_pmf_all_impl(InputMat p, OutputMat res) {
+    XSF_HOST_DEVICE inline auto poisson_binom_pmf_all_impl(InputMat p, OutputMat res) -> decltype(p.extent(0)) {
         using T = typename OutputMat::value_type;
         auto n = p.extent(0);
 
-        // Initialize output array with zeros.
         for (decltype(n) i = 0; i < n + 1; ++i) {
             res(i) = T(0);
         }
-
+        res(0) = T(1);
         if (n == 0) {
-            res(0) = T(1);
-            return;
+            return n;
         }
 
-        res(0) = T(1) - p(0);
-        res(1) = p(0);
-
-        for (decltype(n) i = 1; i < n; i++) {
+        // Retain the existing recurrence for fully stochastic inputs.
+        // In particular, do not put conditional support counts in its hot loop.
+        bool deterministic = false;
+        for (decltype(n) i = 0; i < n; ++i) {
             T p_i = p(i);
-            T q_i = 1 - p_i;
-            for (decltype(n) j = i + 1; j >= 1; j--) {
+            if (p_i == T(0) || p_i == T(1)) {
+                deterministic = true;
+                break;
+            }
+        }
+        if (!deterministic) {
+            res(0) = T(1) - p(0);
+            res(1) = p(0);
+            for (decltype(n) i = 1; i < n; ++i) {
+                T p_i = p(i);
+                T q_i = T(1) - p_i;
+                for (decltype(n) j = i + 1; j >= 1; --j) {
+                    T tmp = res(j - 1) * p_i;
+                    res(j - 1) *= q_i;
+                    res(j) += tmp;
+                }
+            }
+            return n;
+        }
+
+        decltype(n) variable = 0;
+        decltype(n) certain = 0;
+        for (decltype(n) i = 0; i < n; ++i) {
+            T p_i = p(i);
+            if (p_i == T(0)) {
+                continue;
+            }
+            if (p_i == T(1)) {
+                ++certain;
+                continue;
+            }
+            T q_i = T(1) - p_i;
+            for (decltype(n) j = variable + 1; j >= 1; --j) {
                 T tmp = res(j - 1) * p_i;
                 res(j - 1) *= q_i;
                 res(j) += tmp;
             }
+            ++variable;
         }
+
+        // Deterministic successes translate the distribution. Traverse
+        // backwards so the caller's output remains the only work buffer.
+        if (certain != 0) {
+            for (decltype(n) j = variable + 1; j-- > 0;) {
+                res(j + certain) = res(j);
+            }
+            for (decltype(n) j = 0; j < certain; ++j) {
+                res(j) = T(0);
+            }
+        }
+        return variable + certain;
     }
 
 } // namespace detail
@@ -359,13 +401,52 @@ namespace detail {
             res(i) = -cxx::numeric_limits<T>::infinity();
         }
 
-        for (decltype(n) i = 0; i < n; i++) {
-            T log_p = cxx::log(T(p(i)));
-            T log_q = cxx::log1p(-T(p(i)));
-            for (decltype(n) j = i + 1; j >= 1; j--) {
+        bool deterministic = false;
+        for (decltype(n) i = 0; i < n; ++i) {
+            T p_i = p(i);
+            if (p_i == T(0) || p_i == T(1)) {
+                deterministic = true;
+                break;
+            }
+        }
+        if (!deterministic) {
+            for (decltype(n) i = 0; i < n; ++i) {
+                T log_p = cxx::log(T(p(i)));
+                T log_q = cxx::log1p(-T(p(i)));
+                for (decltype(n) j = i + 1; j >= 1; --j) {
+                    res(j) = log_add_exp(res(j) + log_q, res(j - 1) + log_p);
+                }
+                res(0) += log_q;
+            }
+            return;
+        }
+
+        decltype(n) variable = 0;
+        decltype(n) certain = 0;
+        for (decltype(n) i = 0; i < n; ++i) {
+            T p_i = p(i);
+            if (p_i == T(0)) {
+                continue;
+            }
+            if (p_i == T(1)) {
+                ++certain;
+                continue;
+            }
+            T log_p = cxx::log(p_i);
+            T log_q = cxx::log1p(-p_i);
+            for (decltype(n) j = variable + 1; j >= 1; --j) {
                 res(j) = log_add_exp(res(j) + log_q, res(j - 1) + log_p);
             }
             res(0) += log_q;
+            ++variable;
+        }
+        if (certain != 0) {
+            for (decltype(n) j = variable + 1; j-- > 0;) {
+                res(j + certain) = res(j);
+            }
+            for (decltype(n) j = 0; j < certain; ++j) {
+                res(j) = -cxx::numeric_limits<T>::infinity();
+            }
         }
     }
 
@@ -387,12 +468,12 @@ XSF_HOST_DEVICE inline void poisson_binom_sf_all(InputMat p, OutputMat res) {
         return;
     }
 
-    detail::poisson_binom_pmf_all_impl(p, res);
+    auto support_max = detail::poisson_binom_pmf_all_impl(p, res);
 
     // res(0..m-1) is filled from the lower tail and res(m..n) from the upper tail.
     decltype(n) m = 0;
     T cdf = T(0);
-    for (; m < n; ++m) {
+    for (; m < support_max; ++m) {
         T next = cdf + res(m);
         if (!(next < T(0.5))) {
             break;
@@ -402,9 +483,11 @@ XSF_HOST_DEVICE inline void poisson_binom_sf_all(InputMat p, OutputMat res) {
     }
 
     T total = T(0);
-    T pmf_above = res(n);
-    res(n) = T(0);
-    for (decltype(n) i = n; i-- > m;) {
+    T pmf_above = res(support_max);
+    for (decltype(n) i = support_max; i <= n; ++i) {
+        res(i) = T(0);
+    }
+    for (decltype(n) i = support_max; i-- > m;) {
         total += pmf_above;
         pmf_above = res(i);
         res(i) = total;
@@ -430,11 +513,11 @@ XSF_HOST_DEVICE inline void poisson_binom_logsf_all(InputMat p, OutputMat res) {
         return;
     }
 
-    detail::poisson_binom_pmf_all_impl(p, res);
+    auto support_max = detail::poisson_binom_pmf_all_impl(p, res);
 
     decltype(n) m = 0;
     T cdf = T(0);
-    for (; m < n; ++m) {
+    for (; m < support_max; ++m) {
         T next = cdf + res(m);
         if (!(next < T(0.5))) {
             break;
@@ -443,13 +526,17 @@ XSF_HOST_DEVICE inline void poisson_binom_logsf_all(InputMat p, OutputMat res) {
         res(m) = cxx::log1p(-cdf);
     }
 
-    // Upper-tail sums below this may have lost precision to underflow in the pmf.
+    // Structurally impossible tails are already -infinity. Only feasible
+    // upper-tail sums can require the more expensive log-space recurrence.
+    // Sums below this may have lost precision to underflow in the pmf.
     const T smallest_accurate = cxx::numeric_limits<T>::min() / cxx::numeric_limits<T>::epsilon();
     bool underflow = false;
     T total = T(0);
-    T pmf_above = res(n);
-    res(n) = -cxx::numeric_limits<T>::infinity();
-    for (decltype(n) i = n; i-- > m;) {
+    T pmf_above = res(support_max);
+    for (decltype(n) i = support_max; i <= n; ++i) {
+        res(i) = -cxx::numeric_limits<T>::infinity();
+    }
+    for (decltype(n) i = support_max; i-- > m;) {
         total += pmf_above;
         pmf_above = res(i);
         if (total < smallest_accurate) {
@@ -466,7 +553,7 @@ XSF_HOST_DEVICE inline void poisson_binom_logsf_all(InputMat p, OutputMat res) {
     const T log_half = -cxx::log(T(2));
     m = 0;
     T logcdf = -cxx::numeric_limits<T>::infinity();
-    for (; m < n; ++m) {
+    for (; m < support_max; ++m) {
         T next = detail::log_add_exp(logcdf, res(m));
         if (!(next < log_half)) {
             break;
@@ -476,9 +563,11 @@ XSF_HOST_DEVICE inline void poisson_binom_logsf_all(InputMat p, OutputMat res) {
     }
 
     total = -cxx::numeric_limits<T>::infinity();
-    pmf_above = res(n);
-    res(n) = -cxx::numeric_limits<T>::infinity();
-    for (decltype(n) i = n; i-- > m;) {
+    pmf_above = res(support_max);
+    for (decltype(n) i = support_max; i <= n; ++i) {
+        res(i) = -cxx::numeric_limits<T>::infinity();
+    }
+    for (decltype(n) i = support_max; i-- > m;) {
         total = detail::log_add_exp(total, pmf_above);
         pmf_above = res(i);
         res(i) = total;
